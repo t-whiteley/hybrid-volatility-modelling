@@ -41,7 +41,6 @@ class FinData():
         return prices, logreturns
 
 
-
     def get_tensor(self, timeseries, apply_scaler):
         self.apply_scaler = apply_scaler
         if apply_scaler:
@@ -77,22 +76,32 @@ class FinData():
         self.y_test = y_test
         return train_dataloader, test_dataloader
     
+
     def compute_actual_vol(self, window=10):
         """
-        Computes a simple rolling standard deviation of self.data (which are logreturns)
-        and stores it in self.actual_vol as a torch.Tensor.
-
+        Computes realized volatility as per the paper:
+            σ_t = sqrt(mean(ϵ²_{t-k+1}, ..., ϵ²_t))
+        
         Args:
-            window (int): rolling window size for the stdev
+            window (int): rolling window size for realized volatility
+        
+        Returns:
+            self.actual_vol (torch.Tensor): realized volatility time series
         """
-        # self.data is a 1D torch.Tensor of logreturns, shape = (N,).
-        arr = self.data.numpy()  # convert to NumPy for rolling stdev
-        vol_series = pd.Series(arr).rolling(window).var()
-        # Fill initial NaNs:
+        # Convert log returns to NumPy
+        arr = self.data.numpy()  # self.data is a 1D torch.Tensor of logreturns
+        
+        # Compute realized volatility
+        vol_series = pd.Series(arr**2).rolling(window).mean()
+        
+        # Fill initial NaNs (from rolling window)
         vol_series = vol_series.bfill()
-
-        # Store as torch Tensor
+        
+        # Convert back to Torch Tensor
         self.actual_vol = torch.tensor(vol_series.values, dtype=torch.float)
+        
+        return self.actual_vol
+
 
     def get_data_wvol(self, seq_length, batch_size):
         data = torch.stack((self.data, self.actual_vol), dim=1) # (500,2)
